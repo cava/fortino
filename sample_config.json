@@ -1,0 +1,59 @@
+{
+    "mqtt": {
+        "topic": "fortino",
+        "host": "<host>",
+        "port": 1883,
+        "keepalive": 60,
+        "username": "<username>",
+        "password": "<password>"
+    },
+    "update_interval": 600,
+
+    "onewire": [
+        {
+            "name": "DS18B20-1",
+            "type": "DS18B20",
+            "id": "28-111111111111"
+        }
+    ],
+
+    "outputs": [
+        {
+            "name": "POWER1",
+            "id": "POWER1n",
+            "type": "digital",
+            "pin": 17,
+            "inverted_logic": false,
+            "initial": false
+        },
+        {
+            "name": "POWER1",
+            "id": "POWER1p",
+            "type": "digital",
+            "pin": 27,
+            "inverted_logic": true,
+            "initial": false
+        },
+        {
+            "name": "POWER2",
+            "id": "POWER2",
+            "type": "digital",
+            "pin": 22,
+            "inverted_logic": true,
+            "initial": false
+        }
+    ],
+
+    "thermostat":
+        {
+            "enabled": false,
+            "setpoint": 20.0,
+            "actuator": "POWER1",
+            "feedback_type": "onewire",
+            "feedback_name": "DS18B20-1",
+            "regulator": "bangbang",
+            "hysteresis": 0.4,
+            "runtime": 300
+        }
+
+}
