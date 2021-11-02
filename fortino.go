@@ -345,6 +345,10 @@ func SetOutputState(outputName string, state int) error {
 	return nil
 }
 
+var mqttOnConnectHandler mqtt.OnConnectHandler = func(c mqtt.Client) {
+	log.Printf("mqtt: connected to %s", config.MQTT.Host)
+}
+
 func main() {
 
 	logfileHandle, err := os.OpenFile("fortino.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -424,6 +428,7 @@ func main() {
 	opts.SetConnectRetry(true)
 	opts.SetConnectRetryInterval(time.Minute)
 	opts.SetAutoReconnect(true)
+	opts.SetOnConnectHandler(mqttOnConnectHandler)
 	opts.SetWill(
 		fmt.Sprintf("tele/%s/LWT", config.MQTT.Topic),
 		"Offline", 0, true,
