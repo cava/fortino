@@ -110,6 +110,22 @@ func SensorSamplingRuutine(samplingInterval int) {
 			ds18BIndex = ds18BIndex + 1
 		}
 
+		// RPI
+		rpiInfo, err := RPI_GetInfo()
+		if err != nil {
+			log.Println(err)
+		} else {
+			cpuTemp, err := strconv.Atoi(rpiInfo["cpu_temp"])
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			jsonObj["RPI"] = map[string]interface{}{
+				"Id":          rpiInfo["cpu_serial"],
+				"Temperature": (float64(cpuTemp) / 1000.0),
+			}
+		}
+
 		jsonStr, err := json.Marshal(jsonObj)
 		if err != nil {
 			log.Fatal(err)
@@ -157,6 +173,35 @@ func ReadTemp_DS18B20(ID string) (float64, error) {
 	}
 
 	panic("counted 1 equal sign, found none")
+}
+
+func RPI_GetInfo() (map[string]string, error) {
+
+	dict := make(map[string]string)
+
+	dat, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		return dict, err
+	}
+
+	lines := strings.Split(string(dat), "\n")
+	for _, l := range lines {
+		if strings.HasPrefix(l, "Serial") {
+			t := strings.Split(l, ":")
+			if len(t) < 2 {
+				panic("/proc/cpuinfo Serial : wrong format")
+			}
+			dict["cpu_serial"] = strings.Trim(t[1], " ")
+		}
+	}
+
+	dat, err = os.ReadFile("/sys/class/thermal/thermal_zone0/temp")
+	if err != nil {
+		return dict, err
+	}
+	dict["cpu_temp"] = strings.Trim(string(dat), "\n")
+
+	return dict, nil
 }
 
 var mqttCallback mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
