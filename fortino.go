@@ -334,12 +334,16 @@ func SetOutputState(outputName string, state int) error {
 		} else {
 			payload = "true"
 		}
-		mqttClient.Publish(
+		pubToken := mqttClient.Publish(
 			fmt.Sprintf("stat/%s/%s", config.MQTT.Topic, outputName),
 			0,
 			false,
 			payload,
 		)
+		if pubToken.WaitTimeout(time.Second); pubToken.Error() != nil {
+			log.Printf("error publishing token")
+			log.Println(pubToken.Error())
+		}
 	}
 
 	return nil
@@ -351,7 +355,7 @@ var mqttOnConnectHandler mqtt.OnConnectHandler = func(c mqtt.Client) {
 
 func main() {
 
-	logfileHandle, err := os.OpenFile("fortino.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	logfileHandle, err := os.OpenFile("log/fortino.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
 	}
@@ -373,9 +377,8 @@ func main() {
 	go func() {
 		<-sysSignalChan // Wait for exit signal
 		log.Println("exit signal detected")
-		if mqttClient != nil && mqttClient.IsConnected() {
-
-			mqttClient.Disconnect(100)
+		if mqttClient != nil {
+			mqttClient.Disconnect(500)
 		}
 		os.Exit(1)
 	}()
@@ -396,6 +399,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	log.Println("configuration read")
 
 	log.Println("digital outputs initialization:")
 	// Initialize all outputs to the default values
@@ -434,6 +438,7 @@ func main() {
 		"Offline", 0, true,
 	)
 
+	log.Println("mqtt: trying to connect to broker")
 	mqttClient = mqtt.NewClient(opts)
 	token := mqttClient.Connect()
 	if token.Wait() && token.Error() != nil {
