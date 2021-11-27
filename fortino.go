@@ -211,12 +211,23 @@ var mqttCallback mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message
 	if strings.HasSuffix(lowerTopic, "/temptargetset") {
 		rawFloat := string(msg.Payload())
 
-		if s, err := strconv.ParseFloat(rawFloat, 64); err == nil {
-			config.Thermostat.Setpoint = s
-			log.Printf("TEMPTARGETSET Thermostat set point set to %.1f", config.Thermostat.Setpoint)
-		} else {
+		s, err := strconv.ParseFloat(rawFloat, 64)
+		if err != nil {
+
 			log.Printf("TEMPTARGETSET Failed to parse temp setpoint '%s'", rawFloat)
 		}
+
+		if s < 8.0 {
+			log.Printf("TEMPTARGETSET invalid setpoint %.2f ", s)
+			return
+		} else if s > 20 {
+			log.Printf("TEMPTARGETSET invalid setpoint %.2f ", s)
+			return
+		}
+
+		config.Thermostat.Setpoint = s
+		log.Printf("TEMPTARGETSET Thermostat set point set to %.1f", config.Thermostat.Setpoint)
+		return
 	} else {
 		fmt.Printf("TOPIC: %s\n", msg.Topic())
 		fmt.Printf("MSG: %s\n", msg.Payload())
