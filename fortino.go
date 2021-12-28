@@ -24,20 +24,32 @@ var config FortinoConfig
 var mqttClient mqtt.Client
 
 type FortinoConfig struct {
-	MQTT           MQTTConfig
+	MQTT struct {
+		Topic     string
+		Host      string
+		Port      int
+		KeepAlive int
+		Username  string
+		Password  string
+	}
 	UpdateInterval int                   `json:"update_interval"`
 	DigitalOutputs []DigitalOutputConfig `json:"outputs"`
-	Thermostat     ThermostatConfig      `json:"thermostat"`
-	Onewires       []OneWireSensor       `json:"onewire"`
-}
 
-type MQTTConfig struct {
-	Topic     string
-	Host      string
-	Port      int
-	KeepAlive int
-	Username  string
-	Password  string
+	Onewires                      []OneWireSensor `json:"onewire"`
+	HiLinkSMSGatewayEnabled       bool
+	HiLinkSMSGatewayAddress       string
+	HiLinkSMSGatewayAllowedPhones []string
+
+	Thermostat struct {
+		Enabled      bool    `json:"enabled"`
+		Setpoint     float64 `json:"setpoint"`
+		Actuator     string
+		FeedbackType string `json:"feedback_type"`
+		FeedbackName string `json:"feedback_name"`
+		Regulator    string
+		Hysteresis   float64
+		Runtime      uint `json:"runtime"`
+	} `json:"thermostat"`
 }
 
 type DigitalOutputConfig struct {
@@ -46,17 +58,6 @@ type DigitalOutputConfig struct {
 	PIN           byte
 	InvertedLogic bool `json:"inverted_logic"`
 	State         bool `json:"initial"`
-}
-
-type ThermostatConfig struct {
-	Enabled      bool    `json:"enabled"`
-	Setpoint     float64 `json:"setpoint"`
-	Actuator     string
-	FeedbackType string `json:"feedback_type"`
-	FeedbackName string `json:"feedback_name"`
-	Regulator    string
-	Hysteresis   float64
-	Runtime      uint `json:"runtime"`
 }
 
 type OneWireSensor struct {
@@ -74,7 +75,7 @@ type SensorSample struct {
 	SampledAt time.Time
 }
 
-func SensorSamplingRuutine(samplingInterval int) {
+func SensorSamplingRoutine(samplingInterval int) {
 
 	for {
 
@@ -234,27 +235,27 @@ var mqttCallback mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message
 	}
 }
 
-func ThermostatRoutine(th *ThermostatConfig) {
+func ThermostatRoutine() {
 
 	if config.Thermostat.Hysteresis < 0 {
-		log.Fatal("thermostat hysteresis can not be negative")
+		log.Fatal("thermostat: hysteresis can not be negative")
 	}
 
 	var feedbackSensorID string
 	for _, s := range config.Onewires {
-		if s.Name == th.FeedbackName {
+		if s.Name == config.Thermostat.FeedbackName {
 			feedbackSensorID = s.ID
 		}
 	}
 	if len(feedbackSensorID) == 0 {
-		log.Printf("invalid thermostat feedback %s", th.FeedbackName)
+		log.Printf("thermostat: invalid feedback %s", config.Thermostat.FeedbackName)
 		return
 	}
 
 	heaterState := false
 
 	time.Sleep(time.Second * 10)
-	runtime := (time.Second * time.Duration(th.Runtime))
+	runtime := (time.Second * time.Duration(config.Thermostat.Runtime))
 
 	lastOutputUpdate := time.Now().UTC().Add(time.Hour * -1)
 
@@ -475,14 +476,14 @@ func main() {
 		config.UpdateInterval = 3
 	}
 	log.Printf("starting sampling loop every %d seconds", config.UpdateInterval)
-	go SensorSamplingRuutine(config.UpdateInterval)
+	go SensorSamplingRoutine(config.UpdateInterval)
 
 	// Thermostat go routine
 	if config.Thermostat.Runtime < 10 {
 		config.Thermostat.Runtime = 10
 	}
-	log.Printf("starting thermostat with runtime %d seconds", config.Thermostat.Runtime)
-	go ThermostatRoutine(&config.Thermostat)
+	log.Printf("thermostat: starting with runtime %d seconds", config.Thermostat.Runtime)
+	go ThermostatRoutine()
 
 	time.Sleep(time.Hour * 24 * 5)
 }
