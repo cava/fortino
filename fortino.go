@@ -318,20 +318,27 @@ func SetOutputState(outputName string, state int) error {
 		}
 
 		pin := rpio.Pin(o.PIN)
+
+		var pinStateRef rpio.State
 		if (state == 0 && !o.InvertedLogic) || (state == 1 && o.InvertedLogic) {
 			pin.Write(rpio.Low)
-
+			pinStateRef = rpio.Low
 		} else {
-			pin.Write(rpio.High)
+
+			pinStateRef = rpio.High
 		}
 
+		pin.Write(pinStateRef)
 		time.Sleep(time.Second)
 		pinState := pin.Read()
-		if pinState == rpio.High {
+		if pinState != pinStateRef {
+			log.Printf("PIN %d set to %d but feedback is %d\n", pin, pinStateRef, pinState)
+		}
+		/*if pinState == rpio.High {
 			log.Printf("output %d high", o.PIN)
 		} else {
 			log.Printf("output %d low", o.PIN)
-		}
+		}*/
 
 		nameMatched = true
 	}
