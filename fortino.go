@@ -149,17 +149,17 @@ func ReadTemp_DS18B20(ID string) (float64, error) {
 
 	lines := strings.Split(string(dat), "\n")
 	if len(lines) < 2 {
-		log.Println("invalid DS18B20 bus payload")
+		log.Println("onewire: invalid DS18B20 bus payload")
 		return -10010, errors.New("invalid DS18B20 bus payload")
 	}
 
 	if !strings.HasSuffix(strings.TrimRight(lines[0], "\r\n"), "YES") {
-		log.Println("invalid DS18B20 CRC")
+		log.Println("onewire: invalid DS18B20 CRC")
 		return -10020, errors.New("invalid DS18B20 CRC")
 	}
 
 	if strings.Count(lines[1], "=") != 1 {
-		log.Println("invalid DS18B20 format")
+		log.Println("onewire: invalid DS18B20 format")
 		return -10030, errors.New("invalid DS18B20 fortmat")
 	}
 
@@ -173,7 +173,7 @@ func ReadTemp_DS18B20(ID string) (float64, error) {
 		return float64(tempInMilli) / 1000.0, nil
 	}
 
-	panic("counted 1 equal sign, found none")
+	panic("onewire: counted 1 equal sign, found none")
 }
 
 func RPI_GetInfo() (map[string]string, error) {
@@ -272,14 +272,14 @@ func ThermostatRoutine() {
 		tempErr := config.Thermostat.Setpoint - currentTemp
 
 		if tempErr > config.Thermostat.Hysteresis && !heaterState {
-			//log.Printf("Since the temp err is %.1f, turn on the actuator", tempErr)
+			log.Printf("thermostat: Since the temp err is %.1f, turn on the actuator", tempErr)
 			heaterState = true
 			err := SetOutputState(config.Thermostat.Actuator, 1)
 			if err != nil {
 				log.Println(err)
 			}
 		} else if tempErr < (-1*config.Thermostat.Hysteresis) && heaterState {
-			//log.Printf("since the temp err is %.1f, turn off the actuator", tempErr)
+			log.Printf("thermostat: since the temp err is %.1f, turn off the actuator", tempErr)
 			heaterState = false
 			err := SetOutputState(config.Thermostat.Actuator, 0)
 			if err != nil {
@@ -287,9 +287,9 @@ func ThermostatRoutine() {
 			}
 		}
 
-		log.Printf("setpoint %.1f, feedback %.1f, actuator %t", config.Thermostat.Setpoint, currentTemp, heaterState)
+		// log.Printf("setpoint %.1f, feedback %.1f, actuator %t", config.Thermostat.Setpoint, currentTemp, heaterState)
 
-		if time.Now().Sub(lastOutputUpdate) > time.Minute*10 {
+		if time.Now().UTC().Sub(lastOutputUpdate) > time.Minute*10 {
 			lastOutputUpdate = time.Now().UTC()
 			outputState := int(0)
 			if heaterState {
@@ -301,14 +301,13 @@ func ThermostatRoutine() {
 			}
 		}
 
-		// log.Printf("sleep for %.1f", runtime.Seconds())
 		time.Sleep(runtime)
 	}
 }
 
 func SetOutputState(outputName string, state int) error {
 
-	log.Printf("outputstate %s -> %d", outputName, state)
+	// log.Printf("outputstate %s -> %d", outputName, state)
 
 	nameMatched := false
 
@@ -353,7 +352,7 @@ func SetOutputState(outputName string, state int) error {
 			payload,
 		)
 		if pubToken.WaitTimeout(time.Second); pubToken.Error() != nil {
-			log.Printf("error publishing token")
+			log.Printf("mqtt: error publishing token")
 			log.Println(pubToken.Error())
 		}
 	}
@@ -461,9 +460,9 @@ func main() {
 	if token := mqttClient.Subscribe(cmndTopic, 0, nil); token.Wait() && token.Error() != nil {
 		log.Fatalln(token.Error())
 	}
-	log.Printf("subscribed to %s", cmndTopic)
+	log.Printf("mqtt: subscribed to %s", cmndTopic)
 
-	log.Println("sending LWT online message")
+	log.Println("mqtt: sending LWT online message")
 	mqttClient.Publish(
 		fmt.Sprintf("tele/%s/LWT", config.MQTT.Topic),
 		0, true, "Online",
