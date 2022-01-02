@@ -18,7 +18,7 @@ import (
 	"github.com/stianeikeland/go-rpio/v4"
 )
 
-const configFilePath = "config.json"
+const CONFIG_FILE_PATH = "config.json"
 
 var config FortinoConfig
 var mqttClient mqtt.Client
@@ -396,13 +396,18 @@ func main() {
 		<-sysSignalChan // Wait for exit signal
 		log.Println("exit signal detected")
 		if mqttClient != nil {
+			token := mqttClient.Publish(
+				fmt.Sprintf("tele/%s/LWT", config.MQTT.Topic),
+				0, true, "Offline",
+			)
+			token.WaitTimeout(time.Second)
 			mqttClient.Disconnect(500)
 		}
 		os.Exit(1)
 	}()
 
 	// Config file reading
-	configFile, err := os.Open(configFilePath)
+	configFile, err := os.Open(CONFIG_FILE_PATH)
 	if err != nil {
 		log.Fatalln(err)
 	}
