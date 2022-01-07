@@ -19,6 +19,7 @@ import (
 )
 
 const CONFIG_FILE_PATH = "config.json"
+const MQTT_DATETIME_FORMAT = "2006-01-02T15:04:05"
 
 var config FortinoConfig
 var mqttClient mqtt.Client
@@ -40,16 +41,7 @@ type FortinoConfig struct {
 	HiLinkSMSGatewayAddress       string
 	HiLinkSMSGatewayAllowedPhones []string
 
-	Thermostat struct {
-		Enabled      bool    `json:"enabled"`
-		Setpoint     float64 `json:"setpoint"`
-		Actuator     string
-		FeedbackType string `json:"feedback_type"`
-		FeedbackName string `json:"feedback_name"`
-		Regulator    string
-		Hysteresis   float64
-		Runtime      uint `json:"runtime"`
-	} `json:"thermostat"`
+	Thermostat Thermostat `json:"thermostat"`
 }
 
 type DigitalOutputConfig struct {
@@ -80,7 +72,7 @@ func SensorSamplingRoutine(samplingInterval int) {
 	for {
 
 		jsonObj := map[string]interface{}{}
-		jsonObj["Time"] = time.Now().UTC().Format("2006-01-02T15:04:05")
+		jsonObj["Time"] = time.Now().UTC().Format(MQTT_DATETIME_FORMAT)
 
 		// DS18B20...
 		ds18BIndex := 1
@@ -92,6 +84,7 @@ func SensorSamplingRoutine(samplingInterval int) {
 
 			temp, err := ReadTemp_DS18B20(s.ID)
 			if err != nil {
+				// Silently ignores sampling errors...
 				continue
 			}
 
@@ -214,94 +207,18 @@ var mqttCallback mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message
 
 		s, err := strconv.ParseFloat(rawFloat, 64)
 		if err != nil {
-
 			log.Printf("TEMPTARGETSET Failed to parse temp setpoint '%s'", rawFloat)
 		}
 
-		if s < 8.0 {
-			log.Printf("TEMPTARGETSET invalid setpoint %.2f ", s)
-			return
-		} else if s > 20 {
-			log.Printf("TEMPTARGETSET invalid setpoint %.2f ", s)
-			return
+		err = ThermoSetpoint(s)
+		if err != nil {
+			log.Println(err)
 		}
 
-		config.Thermostat.Setpoint = s
-		log.Printf("TEMPTARGETSET Thermostat set point set to %.1f", config.Thermostat.Setpoint)
 		return
 	} else {
 		fmt.Printf("TOPIC: %s\n", msg.Topic())
 		fmt.Printf("MSG: %s\n", msg.Payload())
-	}
-}
-
-func ThermostatRoutine() {
-
-	if config.Thermostat.Hysteresis < 0 {
-		log.Fatal("thermostat: hysteresis can not be negative")
-	}
-
-	var feedbackSensorID string
-	for _, s := range config.Onewires {
-		if s.Name == config.Thermostat.FeedbackName {
-			feedbackSensorID = s.ID
-		}
-	}
-	if len(feedbackSensorID) == 0 {
-		log.Printf("thermostat: invalid feedback %s", config.Thermostat.FeedbackName)
-		return
-	}
-
-	heaterState := false
-
-	time.Sleep(time.Second * 10)
-	runtime := (time.Second * time.Duration(config.Thermostat.Runtime))
-
-	lastOutputUpdate := time.Now().UTC().Add(time.Hour * -1)
-
-	for {
-
-		// log.Println("thermostat loop")
-
-		currentTemp, err := ReadTemp_DS18B20(feedbackSensorID)
-		if err != nil {
-			log.Panicf("thermostat: error reading temp from %s", feedbackSensorID)
-			continue
-		}
-
-		tempErr := config.Thermostat.Setpoint - currentTemp
-
-		if tempErr > config.Thermostat.Hysteresis && !heaterState {
-			log.Printf("thermostat: Since the temp err is %.1f, turn on the actuator", tempErr)
-			heaterState = true
-			err := SetOutputState(config.Thermostat.Actuator, 1)
-			if err != nil {
-				log.Println(err)
-			}
-		} else if tempErr < (-1*config.Thermostat.Hysteresis) && heaterState {
-			log.Printf("thermostat: since the temp err is %.1f, turn off the actuator", tempErr)
-			heaterState = false
-			err := SetOutputState(config.Thermostat.Actuator, 0)
-			if err != nil {
-				log.Println(err)
-			}
-		}
-
-		// log.Printf("setpoint %.1f, feedback %.1f, actuator %t", config.Thermostat.Setpoint, currentTemp, heaterState)
-
-		if time.Now().UTC().Sub(lastOutputUpdate) > time.Minute*10 {
-			lastOutputUpdate = time.Now().UTC()
-			outputState := int(0)
-			if heaterState {
-				outputState = 1
-			}
-			err := SetOutputState(config.Thermostat.Actuator, outputState)
-			if err != nil {
-				log.Println(err)
-			}
-		}
-
-		time.Sleep(runtime)
 	}
 }
 
@@ -400,7 +317,12 @@ func main() {
 				fmt.Sprintf("tele/%s/LWT", config.MQTT.Topic),
 				0, true, "Offline",
 			)
-			token.WaitTimeout(time.Second)
+			published := token.WaitTimeout(time.Second)
+			if published {
+				log.Println("mqtt: LWT offline message sent")
+			} else {
+				log.Println("mqtt: failed to send LWT offline message")
+			}
 			mqttClient.Disconnect(500)
 		}
 		os.Exit(1)
