@@ -36,10 +36,12 @@ type FortinoConfig struct {
 	UpdateInterval int                   `json:"update_interval"`
 	DigitalOutputs []DigitalOutputConfig `json:"outputs"`
 
-	Onewires                      []OneWireSensor `json:"onewire"`
-	HiLinkSMSGatewayEnabled       bool
-	HiLinkSMSGatewayAddress       string
-	HiLinkSMSGatewayAllowedPhones []string
+	Onewires []OneWireSensor `json:"onewire"`
+	//HiLinkSMSGatewayEnabled       bool
+	//HiLinkSMSGatewayAddress       string
+	//HiLinkSMSGatewayAllowedPhones []string
+
+	HiLinkConfig HiLinkConfig `json:"hilink_config"`
 
 	Thermostat Thermostat `json:"thermostat"`
 }
@@ -346,8 +348,13 @@ func main() {
 	}
 	log.Println("configuration read")
 
-	log.Println("digital outputs initialization:")
+	// SMS gateway goroutine
+	if config.HiLinkConfig.Enable {
+		go HiLinkRoutine(config.HiLinkConfig.Address)
+	}
+
 	// Initialize all outputs to the default values
+	io_init := ""
 	for _, v := range config.DigitalOutputs {
 
 		pin := rpio.Pin(v.PIN)
@@ -355,12 +362,13 @@ func main() {
 
 		if (v.State && !v.InvertedLogic) || (!v.State && v.InvertedLogic) {
 			pin.High()
-			log.Printf("- pin %d mode = OUT, state = HIGH", v.PIN)
+			io_init = io_init + fmt.Sprintf(" pin %d OUT [HIGH]", v.PIN)
 		} else {
 			pin.Low()
-			log.Printf("- pin %d mode = OUT, state = LOW", v.PIN)
+			io_init = io_init + fmt.Sprintf(" pin %d OUT [LOW]", v.PIN)
 		}
 	}
+	log.Println("digital I/O init:" + io_init)
 
 	mqtt.ERROR = log.New(os.Stdout, "", 0)
 
