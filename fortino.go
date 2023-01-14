@@ -273,7 +273,7 @@ func SetOutputState(outputName string, state int) error {
 		}
 		pubToken := mqttClient.Publish(
 			fmt.Sprintf("stat/%s/%s", config.MQTT.Topic, outputName),
-			state,
+			0,
 			false,
 			payload,
 		)
